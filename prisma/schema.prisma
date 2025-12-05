@@ -1,0 +1,218 @@
+// This is your Prisma schema file
+
+datasource db {
+  provider     = "postgresql"
+  relationMode = "prisma"
+}
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres"]
+}
+
+// --- 1. USER & AUTHENTICATION ---
+model User {
+  id        String   @id @default(uuid())
+  userId    String   @unique // This comes from Clerk/NextAuth
+  email     String   @unique
+  imageUrl  String?  // Avatar
+  
+  // Relations
+  courses       Course[]       // Courses they teach (Instructor)
+  purchases     Purchase[]     // Courses they bought (Student)
+  userProgress  UserProgress[] // Chapters they completed
+  quizResults   QuizResult[]   // Scores on quizzes
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- 2. COURSE STRUCTURE ---
+model Course {
+  id          String  @id @default(uuid())
+  
+  // Instructor Relation
+  userId      String  
+  user        User    @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  title       String  @db.Text
+  description String? @db.Text
+  imageUrl    String? @db.Text
+  price       Float?
+  isPublished Boolean @default(false)
+
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+
+  // Relations
+  chapters    Chapter[]
+  attachments Attachment[]
+  purchases   Purchase[]
+  
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([userId])
+}
+
+model Category {
+  id      String   @id @default(uuid())
+  name    String   @unique
+  courses Course[]
+}
+
+model Attachment {
+  id        String @id @default(uuid())
+  name      String
+  url       String @db.Text // URL from UploadThing/S3
+
+  courseId  String
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId])
+}
+
+// --- 3. CHAPTERS & CONTENT ---
+model Chapter {
+  id          String  @id @default(uuid())
+  title       String
+  description String? @db.Text
+  videoUrl    String? @db.Text
+  position    Int     // To order chapters (1, 2, 3...)
+  isPublished Boolean @default(false)
+  isFree      Boolean @default(false) // Previewable chapter
+
+  courseId    String
+  course      Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  // Video Hosting Data (Separated for cleaner tables)
+  muxData     MuxData?
+  
+  // Relations
+  userProgress UserProgress[]
+  quiz         Quiz?          // Optional: A chapter might be a quiz instead of video
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId])
+}
+
+// Stores Mux.com specific IDs for video streaming
+model MuxData {
+  id         String  @id @default(uuid())
+  assetId    String
+  playbackId String?
+
+  chapterId  String  @unique
+  chapter    Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+}
+
+// --- 4. STUDENT PROGRESS ---
+model UserProgress {
+  id     String @id @default(uuid())
+  
+  // User Relation
+  userId String 
+  user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  chapterId String
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  isCompleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([chapterId])
+  @@unique([userId, chapterId]) // A user can only have one progress record per chapter
+  @@index([userId])
+}
+
+// --- 5. PURCHASES (Stripe) ---
+model Purchase {
+  id     String @id @default(uuid())
+  
+  // User Relation
+  userId String
+  user   User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, courseId]) // Prevent double buying
+  @@index([courseId])
+  @@index([userId])
+}
+
+model StripeCustomer {
+  id               String @id @default(uuid())
+  userId           String @unique
+  stripeCustomerId String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- 6. QUIZ SYSTEM ---
+model Quiz {
+  id        String   @id @default(uuid())
+  title     String
+  chapterId String   @unique // One quiz per chapter usually
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  questions Question[]
+  results   QuizResult[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Question {
+  id       String @id @default(uuid())
+  text     String // "What is React?"
+  quizId   String
+  quiz     Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  
+  options  Option[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([quizId])
+}
+
+model Option {
+  id         String  @id @default(uuid())
+  text       String  // "A library"
+  isCorrect  Boolean @default(false)
+  
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  @@index([questionId])
+}
+
+model QuizResult {
+  id        String @id @default(uuid())
+  score     Int    // 0 to 100
+  
+  userId    String
+  user      User   @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  
+  quizId    String
+  quiz      Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([quizId])
+}
