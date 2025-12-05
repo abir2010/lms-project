@@ -6,7 +6,6 @@ const nextConfig: NextConfig = {
     serverActions: {
       allowedOrigins: [
         "localhost:3000",
-        "undeputed-crushingly-damion.ngrok-free.dev", // <--- Add your specific Ngrok URL here
       ],
     },
   },

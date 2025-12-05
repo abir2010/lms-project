@@ -1,9 +1,36 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import prisma from "@/lib/db";
 import { WebhookEvent } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 import { Webhook } from "svix";
 
 export async function POST(req: Request) {
+  // ... check for secret
+
+  const headerPayload = await headers();
+  const svix_id = headerPayload.get("svix-id");
+  const svix_timestamp = headerPayload.get("svix-timestamp");
+  const svix_signature = headerPayload.get("svix-signature");
+
+  // --- ADD THIS BLOCK FOR POSTMAN TESTING ---
+  if (headerPayload.get("x-skip-svix") === "true") {
+    console.log("⚠️ SKIPPING VERIFICATION FOR POSTMAN TEST");
+    const payload = await req.json();
+    // Call your DB logic directly here or structure the 'evt' object manually
+    const evt = {
+      type: "user.created",
+      data: payload.data,
+    } as any;
+
+    // ... Copy your DB logic here or refmVactor it into a function
+    // For this quick test, just jumping to the switch case:
+    if (evt.type === "user.created") {
+      // ... paste your create logic
+    }
+    return new Response("Skipped verification", { status: 200 });
+  }
+  // ------------------------------------------
+
   console.log("📢 WEBHOOK HIT: /api/webhook called");
 
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;

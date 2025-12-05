@@ -1,11 +1,21 @@
 import { PrismaClient } from "@prisma/client";
+import "dotenv/config";
 
 declare global {
   var prisma: PrismaClient | undefined;
 }
 
-// In Prisma 7, we pass the datasourceUrl directly if needed, or rely on the config
-const db = globalThis.prisma || new PrismaClient();
+// FIX: We must use the 'datasources' object structure.
+// 'db' corresponds to 'datasource db { ... }' in your schema.prisma
+const db =
+  globalThis.prisma ||
+  new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
+  });
 
 if (process.env.NODE_ENV !== "production") globalThis.prisma = db;
 
